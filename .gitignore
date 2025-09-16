@@ -1,0 +1,9 @@
+# IDE and editor files
+.vscode/
+
+# Compiled object files
+*.o
+*.obj
+
+# MacOS generated files
+.DS_Store
