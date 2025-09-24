@@ -4,6 +4,7 @@
 # Compiled object files
 *.o
 *.obj
+orderbook
 
 # MacOS generated files
 .DS_Store

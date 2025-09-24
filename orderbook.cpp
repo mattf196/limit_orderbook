@@ -28,29 +28,24 @@ bool OrderBook::canMatch(OrderSide side, Price price) const
               << (side == OrderSide::BUY ? "BUY" : "SELL") 
               << ", Price: " << price << "\n";
     
-    if (side == OrderSide::BUY){
-        if (asks_.empty())
-        {
-            std::cout << "[CANMATCH] No asks available - cannot match BUY order" << "\n";
+    // Lambda to handle both bid and ask matching logic
+    auto checkMatch = [&](const auto& sideMap, const std::string& sideName, auto comparator) {
+        if (sideMap.empty()) {
+            std::cout << "[CANMATCH] No " << sideName << "s available - cannot match " 
+                      << (side == OrderSide::BUY ? "BUY" : "SELL") << " order" << "\n";
             return false;
         }
-        bool canMatch = (price >= asks_.begin()->first);
-        std::cout << "[CANMATCH] BUY order @ " << price << " vs best ask @ " 
-                  << asks_.begin()->first << " - " 
+        bool canMatch = comparator(price, sideMap.begin()->first);
+        std::cout << "[CANMATCH] " << (side == OrderSide::BUY ? "BUY" : "SELL") 
+                  << " order @ " << price << " vs best " << sideName << " @ " 
+                  << sideMap.begin()->first << " - " 
                   << (canMatch ? "CAN MATCH" : "CANNOT MATCH") << "\n";
-        return canMatch; 
-    }else{
-        if (bids_.empty())
-        {
-            std::cout << "[CANMATCH] No bids available - cannot match SELL order" << "\n";
-            return false;
-        }
-        bool canMatch = price <= bids_.begin()->first;
-        std::cout << "[CANMATCH] SELL order @ " << price << " vs best bid @ " 
-                  << bids_.begin()->first << " - " 
-                  << (canMatch ? "CAN MATCH" : "CANNOT MATCH") << "\n";
-        return canMatch; 
-    }
+        return canMatch;
+    };
+    
+    return (side == OrderSide::BUY) 
+        ? checkMatch(asks_, "ask", [](Price p1, Price p2) { return p1 >= p2; })
+        : checkMatch(bids_, "bid", [](Price p1, Price p2) { return p1 <= p2; });
 }
 
 Trades OrderBook::matchOrders()
@@ -135,25 +130,21 @@ Trades OrderBook::matchOrders()
     // Check ALL orders at all price levels, not just the first order at each level
     std::vector<OrderId> fokOrdersToCancel;
     
-    // Check all bid price levels for unfilled FOK orders
-    for (const auto& [price, orders] : bids_) {
-        for (const auto& order : orders) {
-            if (order->getOrderType() == OrderType::FOK && !order->isFilled()) {
-                std::cout << "[MATCHORDERS] Found unfilled FOK bid order " << order->getOrderId() << " to cancel" << "\n";
-                fokOrdersToCancel.push_back(order->getOrderId());
+    // Lambda to collect unfilled FOK orders from either bid or ask side
+    auto collectFokOrders = [&](const auto& sideMap, const std::string& sideName) {
+        for (const auto& [price, orders] : sideMap) {
+            for (const auto& order : orders) {
+                if (order->getOrderType() == OrderType::FOK && !order->isFilled()) {
+                    std::cout << "[MATCHORDERS] Found unfilled FOK " << sideName << " order " 
+                              << order->getOrderId() << " to cancel" << "\n";
+                    fokOrdersToCancel.push_back(order->getOrderId());
+                }
             }
         }
-    }
+    };
 
-    // Check all ask price levels for unfilled FOK orders
-    for (const auto& [price, orders] : asks_) {
-        for (const auto& order : orders) {
-            if (order->getOrderType() == OrderType::FOK && !order->isFilled()) {
-                std::cout << "[MATCHORDERS] Found unfilled FOK ask order " << order->getOrderId() << " to cancel" << "\n";
-                fokOrdersToCancel.push_back(order->getOrderId());
-            }
-        }
-    }
+    collectFokOrders(bids_, "bid");
+    collectFokOrders(asks_, "ask");
     
     // Cancel FOK orders after matching is complete to avoid recursion
     for (OrderId orderId : fokOrdersToCancel) {
@@ -181,25 +172,19 @@ Trades OrderBook::addOrder(OrderPointer order)
         return {};
     }
 
-    OrderPointers::iterator iterator;
-
-    if (order->getOrderSide() == OrderSide::BUY)
-    {
-        auto& orders = bids_[order->getPrice()];
+    // Lambda to handle adding orders to either bid or ask side
+    auto addToSide = [&](auto& sideMap, const std::string& sideName) -> OrderPointers::iterator {
+        auto& orders = sideMap[order->getPrice()];
         orders.push_back(order);
-        iterator = std::next(orders.begin(), orders.size()-1);
-        std::cout << "[ADDORDER] Added BUY order to bid level " << order->getPrice() 
-                  << " (now " << orders.size() << " orders at this level)" << "\n";
-    }
-    else
-    {
-        auto& orders = asks_[order->getPrice()];
-        orders.push_back(order);
-        iterator = std::next(orders.begin(), orders.size()-1);
-        std::cout << "[ADDORDER] Added SELL order to ask level " << order->getPrice() 
-                  << " (now " << orders.size() << " orders at this level)" << "\n";
+        auto iterator = std::next(orders.begin(), orders.size()-1);
+        std::cout << "[ADDORDER] Added " << sideName << " order to " << sideName << " level " 
+                  << order->getPrice() << " (now " << orders.size() << " orders at this level)" << "\n";
+        return iterator;
+    };
 
-    }
+    OrderPointers::iterator iterator = (order->getOrderSide() == OrderSide::BUY)
+        ? addToSide(bids_, "BUY")
+        : addToSide(asks_, "SELL");
     orders_.insert({order->getOrderId(), OrderEntry{ order, iterator}});
     
     std::cout << "[ADDORDER] Order successfully added to book, initiating matching..." << "\n";
@@ -218,22 +203,16 @@ void OrderBook::cancelOrder(OrderId orderId){
     auto iteratorCopy = iterator;  // Copy the iterator before orders_.erase() invalidates it
     orders_.erase(orderId);
 
-    if(orderSide == OrderSide::SELL){
-        auto& orders = asks_.at(orderPrice);
+    // Lambda to handle removing orders from either bid or ask side
+    auto removeFromSide = [&](auto& sideMap) {
+        auto& orders = sideMap.at(orderPrice);
         orders.erase(iteratorCopy);  // Use the copied iterator
         if(orders.empty()){
-            asks_.erase(orderPrice);
+            sideMap.erase(orderPrice);
         }
+    };
 
-    }
-    else
-    {
-        auto& orders = bids_.at(orderPrice);
-        orders.erase(iteratorCopy);  // Use the copied iterator
-        if(orders.empty()){
-            bids_.erase(orderPrice);
-        }
-    }
+    (orderSide == OrderSide::SELL) ? removeFromSide(asks_) : removeFromSide(bids_);
 }
 
 Trades OrderBook::matchOrder(OrderModifier order)
@@ -255,11 +234,15 @@ OrderBookBAA OrderBook::getOrderBookLevelInfos() const {
     bidlevels.reserve(orders_.size());
     asklevels.reserve(orders_.size());
 
-    auto createLevelInfos = [](Price price, const OrderPointers& orders){
-        return OrderBookLevel{price, std::accumulate(orders.begin(), orders.end(), (Quantity) 0,
-            [](Quantity runningSum, const OrderPointer& order)
-                {return runningSum + order->getRemainingQuantity(); }) };
-
+        auto createLevelInfos = [](Price price, const OrderPointers& orders){
+        std::uint32_t totalQty = std::accumulate(orders.begin(), orders.end(), 0u,
+            [](std::uint32_t runningSum, const OrderPointer& order)
+                {return runningSum + order->getRemainingQuantity().get(); });
+        // Handle case where totalQty is 0 (no orders at this level)
+        if (totalQty == 0) {
+            return OrderBookLevel{price, Quantity(1)}; // Use minimum valid quantity
+        }
+        return OrderBookLevel{price, Quantity(totalQty)};
             };
 
     for (const auto& [price, orders] : bids_){

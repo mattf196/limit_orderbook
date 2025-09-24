@@ -46,8 +46,8 @@ OrderType testingGetOrderType() {
 
 void testingCreateOrder(OrderBook& orderBook) {
     OrderId id;
-    Price price;
-    Quantity quantity;
+    Price price(1);  // Initialize with valid value
+    Quantity quantity(1);  // Initialize with valid value
     
     std::cout << "\n--- Create New Order ---\n";
     
@@ -66,26 +66,32 @@ void testingCreateOrder(OrderBook& orderBook) {
     OrderType type = testingGetOrderType();
     
     // Get Price with validation
+    bool validPrice = false;
     do {
         std::cout << "Price: ";
-        std::cin >> price;
-        if (std::cin.fail() || price <= 0) {
+        try {
+            std::cin >> price;
+            validPrice = true;
+        } catch (const std::exception& e) {
             std::cin.clear();
             std::cin.ignore(10000, '\n');
             std::cout << "Invalid input. Please enter a positive price.\n";
         }
-    } while (std::cin.fail() || price <= 0);
+    } while (!validPrice);
     
     // Get Quantity with validation
+    bool validQuantity = false;
     do {
         std::cout << "Quantity: ";
-        std::cin >> quantity;
-        if (std::cin.fail() || quantity == 0) {
+        try {
+            std::cin >> quantity;
+            validQuantity = true;
+        } catch (const std::exception& e) {
             std::cin.clear();
             std::cin.ignore(10000, '\n');
             std::cout << "Invalid input. Please enter a positive quantity.\n";
         }
-    } while (std::cin.fail() || quantity == 0);
+    } while (!validQuantity);
     
     try {
         auto order = std::make_shared<Order>(id, side, type, price, quantity);
@@ -110,21 +116,58 @@ void testingCreateOrder(OrderBook& orderBook) {
 
 void testingModifyOrder(OrderBook& orderBook) {
     OrderId id;
-    Price price;
-    Quantity quantity;
+    Price price(1);  // Initialize with valid value
+    Quantity quantity(1);  // Initialize with valid value
     
     std::cout << "\n--- Modify Existing Order ---\n";
-    std::cout << "Order ID to modify: ";
-    std::cin >> id;
+    
+    // Get Order ID with validation
+    do {
+        std::cout << "Order ID to modify: ";
+        std::cin >> id;
+        if (std::cin.fail() || id == 0) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            std::cout << "Invalid input. Please enter a positive order ID.\n";
+        }
+    } while (std::cin.fail() || id == 0);
+    
+    // Check if order exists before asking for other parameters
+    if (!orderBook.orderExists(id)) {
+        std::cout << "Error: Order ID " << id << " does not exist in the order book.\n";
+        return;
+    }
     
     OrderSide side = testingGetOrderSide();
     OrderType type = testingGetOrderType();
     
-    std::cout << "New price: ";
-    std::cin >> price;
+    // Get Price with validation
+    bool validPrice = false;
+    do {
+        std::cout << "New price: ";
+        try {
+            std::cin >> price;
+            validPrice = true;
+        } catch (const std::exception& e) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            std::cout << "Invalid input. Please enter a positive price.\n";
+        }
+    } while (!validPrice);
     
-    std::cout << "New quantity: ";
-    std::cin >> quantity;
+    // Get Quantity with validation
+    bool validQuantity = false;
+    do {
+        std::cout << "New quantity: ";
+        try {
+            std::cin >> quantity;
+            validQuantity = true;
+        } catch (const std::exception& e) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            std::cout << "Invalid input. Please enter a positive quantity.\n";
+        }
+    } while (!validQuantity);
     
     try {
         OrderModifier modifier(id, side, type, price, quantity);
@@ -143,12 +186,27 @@ void testingCancelOrder(OrderBook& orderBook) {
     OrderId id;
     
     std::cout << "\n--- Cancel Order ---\n";
-    std::cout << "Order ID to cancel: ";
-    std::cin >> id;
+    
+    // Get Order ID with validation
+    do {
+        std::cout << "Order ID to cancel: ";
+        std::cin >> id;
+        if (std::cin.fail() || id == 0) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            std::cout << "Invalid input. Please enter a positive order ID.\n";
+        }
+    } while (std::cin.fail() || id == 0);
+    
+    // Check if order exists before attempting cancellation
+    if (!orderBook.orderExists(id)) {
+        std::cout << "Error: Order ID " << id << " does not exist in the order book.\n";
+        return;
+    }
     
     try {
         orderBook.cancelOrder(id);
-        std::cout << "Order cancellation processed.\n";
+        std::cout << "Order " << id << " cancelled successfully.\n";
     } catch (const std::exception& e) {
         std::cout << "Error cancelling order: " << e.what() << "\n";
     }

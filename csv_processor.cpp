@@ -81,21 +81,30 @@ void processCsvFile(const std::string& filename, OrderBook& orderBook) {
             // Use range-checked conversion to prevent silent truncation
             OrderId orderId = safeStringToNumber<OrderId>(orderIdStr);
 
+            // Lambda functions for enum parsing
+            auto parseOrderSide = [](const std::string& side) {
+                return (side == "BUY") ? OrderSide::BUY : OrderSide::SELL;
+            };
+            
+            auto parseOrderType = [](const std::string& type) {
+                return (type == "GTC") ? OrderType::GTC : OrderType::FOK;
+            };
+
             if (action == "CREATE") {
-                OrderSide orderSide = (side == "BUY") ? OrderSide::BUY : OrderSide::SELL;
-                OrderType orderType = (type == "GTC") ? OrderType::GTC : OrderType::FOK;
-                Price price = safeStringToNumber<Price>(priceStr);
-                Quantity quantity = safeStringToNumber<Quantity>(quantityStr);
+                OrderSide orderSide = parseOrderSide(side);
+                OrderType orderType = parseOrderType(type);
+                Price price(safeStringToNumber<std::int32_t>(priceStr));
+                Quantity quantity(safeStringToNumber<std::uint32_t>(quantityStr));
 
                 auto order = std::make_shared<Order>(orderId, orderSide, orderType, price, quantity);
                 auto trades = orderBook.addOrder(order);
                 totalTrades += trades.size();
 
             } else if (action == "MODIFY") {
-                OrderSide orderSide = (side == "BUY") ? OrderSide::BUY : OrderSide::SELL;
-                OrderType orderType = (type == "GTC") ? OrderType::GTC : OrderType::FOK;
-                Price price = safeStringToNumber<Price>(priceStr);
-                Quantity quantity = safeStringToNumber<Quantity>(quantityStr);
+                OrderSide orderSide = parseOrderSide(side);
+                OrderType orderType = parseOrderType(type);
+                Price price(safeStringToNumber<std::int32_t>(priceStr));
+                Quantity quantity(safeStringToNumber<std::uint32_t>(quantityStr));
 
                 OrderModifier modifier(orderId, orderSide, orderType, price, quantity);
                 auto trades = orderBook.matchOrder(modifier);

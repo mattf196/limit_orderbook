@@ -12,6 +12,7 @@
 #include <vector>       // Trade collections and order book snapshots
 #include <numeric>      // Quantity aggregation for level summaries
 #include <memory>       // Smart pointers
+#include "types.h"      // Strong type definitions for Price, Quantity, OrderId
 
 /**
  * Order lifecycle behavior types
@@ -31,10 +32,8 @@ enum class OrderSide
     SELL  // Ask - willing to sell at price or better
 };
 
-// Core type definitions for type safety and clarity
-using Price = std::int32_t;      // Price in smallest currency unit (e.g. cents)
-using Quantity = std::uint32_t;  // Number of shares/units
-using OrderId = std::uint64_t;   // Unique order identifier
+// Strong types are now defined in types.h
+// Price, Quantity, and OrderId are imported from there
 
 /**
  * Aggregated price level for market data snapshots
@@ -88,7 +87,7 @@ class Order
     Quantity getInitialQuantity() const { return initialQuantity_; }
     Quantity getRemainingQuantity() const { return remainingQuantity_; }
     Quantity getFilledQuantity() const { return initialQuantity_ - remainingQuantity_; }
-    bool isFilled() const { return remainingQuantity_ == 0; }
+    bool isFilled() const { return remainingQuantity_.get() == 0; }
 
     /**
      * Execute partial or complete fill against this order
@@ -242,6 +241,13 @@ class OrderBook
      * @return Count of all orders (both bids and asks)
      */
     std::size_t getSize() const {return orders_.size();}
+
+    /**
+     * Check if an order with given ID exists in the book
+     * @param orderId Unique identifier of order to check
+     * @return true if order exists, false otherwise
+     */
+    bool orderExists(OrderId orderId) const { return orders_.find(orderId) != orders_.end(); }
 
     /**
      * Generate aggregated order book snapshot for market data
